@@ -1,21 +1,19 @@
 import logging
 from urllib.parse import urljoin
+
 import requests
 from bs4 import BeautifulSoup
-# from queue import Queue
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)s:%(message)s',
-    level=logging.INFO)
+from abstracts.link_filter import LinkFilter
 
 
 class Crawler:
-
-    def __init__(self, urls=None):
+    def __init__(self, urls=None, link_filter: LinkFilter=None):
         if urls is None:
             urls = []
         self.visited_urls = []
         self.urls_to_visit = urls
+        self.link_filter = link_filter
 
     def download_url(self, url):
         return requests.get(url).text
@@ -23,14 +21,20 @@ class Crawler:
     def get_linked_urls(self, url, html):
         soup = BeautifulSoup(html, 'html.parser')
         for link in soup.find_all('a'):
+            self.link_filter.filter(link)
             path = link.get('href')
-            if path and path.startswith('/'):
-                path = urljoin(url, path)
-            yield path
+            if path:
+                if path.startswith('/'):  # fixes reference links
+                    path = urljoin(url, path)
+                yield path  # TODO: can path be None ?
 
     def add_url_to_visit(self, url):
-        if url not in self.visited_urls and url not in self.urls_to_visit:
+        if self._is_new_link(url):
             self.urls_to_visit.append(url)
+
+    def _is_new_link(self, url):
+        return url not in self.visited_urls and \
+               url not in self.urls_to_visit
 
     def crawl(self, url):
         html = self.download_url(url)
@@ -47,8 +51,3 @@ class Crawler:
                 logging.exception(f'Failed to crawl: {url}')
             finally:
                 self.visited_urls.append(url)
-
-
-if __name__ == '__main__':
-    seed_urls = ['https://www.imdb.com/']
-    Crawler(urls=seed_urls).run()
