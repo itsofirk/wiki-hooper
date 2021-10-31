@@ -4,13 +4,15 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from abstracts.link_filter import LinkFilter
+from core.link_filter import LinkFilter
 
 
 class Crawler:
-    def __init__(self, urls=None, link_filter: LinkFilter=None):
+    def __init__(self, urls=None, link_filter: LinkFilter = None):
         if urls is None:
             urls = []
+        if link_filter is None:
+            link_filter = LinkFilter()
         self.visited_urls = []
         self.urls_to_visit = urls
         self.link_filter = link_filter
@@ -19,14 +21,16 @@ class Crawler:
         return requests.get(url).text
 
     def get_linked_urls(self, url, html):
-        soup = BeautifulSoup(html, 'html.parser')
-        for link in soup.find_all('a'):
-            self.link_filter.filter(link)
+        soup = self._get_soup(html)
+        for link in self.link_filter(soup.find_all('a')):
             path = link.get('href')
             if path:
                 if path.startswith('/'):  # fixes reference links
                     path = urljoin(url, path)
-                yield path  # TODO: can path be None ?
+                yield path
+
+    def _get_soup(self, html):
+        return BeautifulSoup(html, 'html.parser')
 
     def add_url_to_visit(self, url):
         if self._is_new_link(url):
